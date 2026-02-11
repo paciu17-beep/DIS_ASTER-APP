@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>DIS-ASTER APS</title>
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="DIS-ASTER">
+    <link rel="apple-touch-icon" href="https://via.placeholder.com/180/1a2a3a/ffffff?text=DA">
+    
+    <link rel="manifest" href='data:application/json,{"name":"DIS-ASTER APS","short_name":"DIS-ASTER","start_url":".","display":"standalone","background_color":"#1a2a3a","theme_color":"#1a2a3a","icons":[{"src":"https://via.placeholder.com/192/1a2a3a/ffffff?text=DA","sizes":"192x192","type":"image/png"},{"src":"https://via.placeholder.com/512/1a2a3a/ffffff?text=DA","sizes":"512x512","type":"image/png"}]}'>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+    
+    <style>
+        :root { --primary: #1a2a3a; --accent: #c0392b; --bg: #f4f7f6; }
+        body { font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); padding: 10px; margin: 0; color: #333; }
+        .container { max-width: 850px; background: white; margin: 5px auto; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        
+        header { text-align: center; border-bottom: 2px solid #333; margin-bottom: 20px; padding-bottom: 10px; }
+        header h1 { margin: 0; font-size: 22px; color: var(--primary); }
+
+        .nav-tabs { display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 1px solid #ddd; }
+        .nav-tabs a { flex: 1; text-align: center; padding: 12px; cursor: pointer; font-weight: bold; color: #888; text-decoration: none; font-size: 14px; transition: 0.3s; }
+        .nav-tabs a.active { color: var(--accent); border-bottom: 3px solid var(--accent); }
+
+        #area-stampa { background: white; padding: 15px; border: 1px solid #eee; border-radius: 8px; }
+        .section-title { background: #f8f9fa; padding: 10px; font-weight: bold; border-left: 5px solid var(--primary); margin: 20px 0 10px 0; font-size: 14px; text-transform: uppercase; }
+        
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        input, textarea { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 16px; margin-top: 5px; }
+        label { font-size: 12px; font-weight: bold; color: #555; }
+
+        .consent-box { border: 1px solid #eee; padding: 15px; border-radius: 8px; margin-top: 10px; font-size: 13px; }
+        .consent-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px dashed #f0f0f0; padding-bottom: 8px; }
+
+        .btn-main { background: var(--primary); color: white; padding: 15px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; font-size: 15px; }
+        .btn-pdf { background: #34495e; color: white; padding: 15px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 8px; font-size: 15px; }
+        
+        .btn-action { padding: 6px 10px; border: none; border-radius: 4px; cursor: pointer; color: white; font-weight: bold; font-size: 11px; margin-right: 2px; }
+
+        #archivio-section { display: none; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 12px; }
+        th, td { border: 1px solid #eee; padding: 10px; text-align: left; }
+        th { background: #f8f9fa; }
+
+        .firma-area { margin-top: 30px; display: flex; justify-content: space-between; align-items: flex-end; }
+        .firma-linea { width: 200px; border-top: 1px solid #000; text-align: center; font-size: 11px; padding-top: 5px; margin-top: 40px; }
+
+        @media print { .nav-tabs, .btn-main, .btn-pdf, .btn-action { display: none !important; } }
+    </style>
+</head>
+<body onload="ripristinaSessione()">
+
+<div class="container">
+    <header>
+        <h1>DIS-ASTER APS</h1>
+        <div style="font-size:11px; color:#666;">Culture & Social Club • Crema</div>
+    </header>
+
+    <div class="nav-tabs">
+        <a id="tab-mod" class="active" onclick="switchTab('modulo')">MODULO</a>
+        <a id="tab-arc" onclick="switchTab('archivio')">ARCHIVIO AI</a>
+    </div>
+
+    <div id="modulo-section">
+        <form id="tesseramentoForm">
+            <input type="hidden" id="edit_index" value="-1">
+            <div id="area-stampa">
+                <div class="section-title">Anagrafica Socio</div>
+                <div class="grid">
+                    <div><label>Cognome *</label><input type="text" id="f_cognome" name="cognome" required></div>
+                    <div><label>Nome *</label><input type="text" id="f_nome" name="nome" required></div>
+                </div>
+                <div class="grid">
+                    <div><label>Codice Fiscale *</label><input type="text" id="f_cf" name="cf" maxlength="16" required></div>
+                    <div><label>Cellulare</label><input type="tel" id="f_tel" name="tel" value="+39 "></div>
+                </div>
+                <div style="margin-top:10px;"><label>E-mail</label><input type="email" id="f_email" name="email"></div>
+                <div style="margin-top:10px;"><label>Note</label><textarea id="f_note" name="note"></textarea></div>
+
+                <div class="section-title">Consensi</div>
+                <div class="consent-box">
+                    <div class="consent-row">
+                        <span><b>Privacy GDPR 2.4/2.5 *</b></span>
+                        <div>
+                            <input type="radio" name="privacy" id="p_si" value="Si" checked> Sì
+                            <input type="radio" name="privacy" id="p_no" value="No"> No
+                        </div>
+                    </div>
+                    <div class="consent-row">
+                        <span><b>Uso Immagini (Foto/Video)</b></span>
+                        <div>
+                            <input type="radio" name="immagini" id="i_si" value="Si" checked> Sì
+                            <input type="radio" name="immagini" id="i_no" value="No"> No
+                        </div>
+                    </div>
+                    <label style="display:block; margin-top:10px;">
+                        <input type="checkbox" name="statuto" required checked> Accetto lo Statuto Sociale DIS-ASTER APS *
+                    </label>
+                    <label style="display:block; margin-top:5px;">
+                        <input type="checkbox" name="informativa" required checked> Dichiaro visione Informativa Privacy *
+                    </label>
+                </div>
+
+                <div class="firma-area">
+                    <div style="font-size:12px;">Data: <span id="data_display"></span></div>
+                    <div class="firma-linea">Firma del Socio richiedente</div>
+                </div>
+            </div>
+
+            <button type="submit" class="btn-main">SALVA IN ARCHIVIO LOCALE</button>
+            <button type="button" class="btn-pdf" onclick="scaricaPDFSolo()">SCARICA MODULO PDF</button>
+        </form>
+    </div>
+
+    <div id="archivio-section">
+        <div style="background:#eef2f5; padding:15px; border-radius:8px; margin-bottom:15px;">
+            <label><b>Importazione Intelligente Excel:</b></label>
+            <input type="file" id="xlsxFileInput" accept=".xlsx, .xls" style="margin-top:8px; font-size:12px;">
+            <button onclick="importaExcelAI()" class="btn-main" style="padding:10px; font-size:13px; background:#8e44ad;">ELABORA E MAPPA DATI AI</button>
+        </div>
+        <input type="text" id="searchInput" onkeyup="cercaSocio()" placeholder="🔍 Cerca socio..." style="padding:12px; border:2px solid #3498db; margin-bottom:10px; width:100%; border-radius:6px; box-sizing:border-box;">
+        <table id="tabellaArchivio">
+            <thead><tr><th>Nominativo</th><th>C.F.</th><th>Azioni</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    // --- SERVICE WORKER INLINE (Per abilitare l'installazione PWA) ---
+    if ('serviceWorker' in navigator) {
+        const sw = 'data:application/javascript;base64,' + btoa('self.addEventListener("fetch", (event) => { event.respondWith(fetch(event.request)); });');
+        navigator.serviceWorker.register(sw);
+    }
+
+    // --- LOGICA NAVIGAZIONE E SESSIONE ---
+    function switchTab(tipo) {
+        if (tipo === 'archivio') {
+            if (sessionStorage.getItem('auth') !== 'ok') {
+                if (prompt("Password Archivio:") === "qwerty") { sessionStorage.setItem('auth', 'ok'); } else return;
+            }
+            document.getElementById('modulo-section').style.display = 'none';
+            document.getElementById('archivio-section').style.display = 'block';
+            document.getElementById('tab-mod').classList.remove('active');
+            document.getElementById('tab-arc').classList.add('active');
+            sessionStorage.setItem('lastTab', 'archivio');
+            aggiornaTabella();
+        } else {
+            document.getElementById('modulo-section').style.display = 'block';
+            document.getElementById('archivio-section').style.display = 'none';
+            document.getElementById('tab-mod').classList.add('active');
+            document.getElementById('tab-arc').classList.remove('active');
+            sessionStorage.setItem('lastTab', 'modulo');
+        }
+    }
+
+    function ripristinaSessione() {
+        document.getElementById('data_display').innerText = new Date().toLocaleDateString();
+        document.getElementById('f_cf').addEventListener('input', function() { this.value = this.value.toUpperCase().replace(/\s/g, ''); });
+        document.getElementById('f_cognome').addEventListener('input', function() { this.value = this.value.toUpperCase(); });
+        document.getElementById('f_nome').addEventListener('input', function() { this.value = this.value.toUpperCase(); });
+        if (sessionStorage.getItem('lastTab') === 'archivio') switchTab('archivio');
+    }
+
+    function scaricaPDFSolo() {
+        const cog = document.getElementById('f_cognome').value;
+        if(!cog) return alert("Inserisci il cognome!");
+        const element = document.getElementById('area-stampa');
+        html2pdf().set({ margin: 10, filename: `Modulo_${cog}.pdf`, jsPDF: { format: 'a4' } }).from(element).save();
+    }
+
+    document.getElementById('tesseramentoForm').onsubmit = (e) => {
+        e.preventDefault();
+        const socio = Object.fromEntries(new FormData(e.target).entries());
+        socio.data_salv = new Date().toLocaleDateString();
+        let db = JSON.parse(localStorage.getItem('disasterFullDB')) || [];
+        const idx = parseInt(document.getElementById('edit_index').value);
+        if (idx > -1) db[idx] = socio; else db.push(socio);
+        localStorage.setItem('disasterFullDB', JSON.stringify(db));
+        alert("Salvato in archivio locale!");
+        document.getElementById('tesseramentoForm').reset();
+        document.getElementById('edit_index').value = "-1";
+        switchTab('archivio');
+    };
+
+    function aggiornaTabella() {
+        const db = JSON.parse(localStorage.getItem('disasterFullDB')) || [];
+        const tbody = document.querySelector('#tabellaArchivio tbody');
+        tbody.innerHTML = db.map((s, i) => `
+            <tr>
+                <td><b>${s.cognome}</b> ${s.nome}</td>
+                <td><code>${s.cf}</code></td>
+                <td>
+                    <button class="btn-action" style="background:#f39c12" onclick="caricaModifica(${i})">EDIT</button>
+                    <button class="btn-action" style="background:#34495e" onclick="caricaModifica(${i}); setTimeout(scaricaPDFSolo, 300)">PDF</button>
+                    <button class="btn-action" style="background:#e74c3c" onclick="elimina(${i})">X</button>
+                </td>
+            </tr>
+        `).reverse().join('');
+    }
+
+    function caricaModifica(i) {
+        const s = JSON.parse(localStorage.getItem('disasterFullDB'))[i];
+        document.getElementById('edit_index').value = i;
+        document.getElementById('f_cognome').value = s.cognome;
+        document.getElementById('f_nome').value = s.nome;
+        document.getElementById('f_cf').value = s.cf;
+        document.getElementById('f_tel').value = s.tel;
+        document.getElementById('f_email').value = s.email;
+        document.getElementById('f_note').value = s.note;
+        document.getElementById(s.privacy === 'Si' ? 'p_si' : 'p_no').checked = true;
+        document.getElementById(s.immagini === 'Si' ? 'i_si' : 'i_no').checked = true;
+        switchTab('modulo');
+    }
+
+    function elimina(i) { if(confirm("Eliminare?")) { let db = JSON.parse(localStorage.getItem('disasterFullDB')); db.splice(i,1); localStorage.setItem('disasterFullDB', JSON.stringify(db)); aggiornaTabella(); } }
+
+    function importaExcelAI() {
+        const file = document.getElementById('xlsxFileInput').files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const raw = XLSX.utils.sheet_to_json(XLSX.read(new Uint8Array(e.target.result), { type: 'array' }).Sheets[XLSX.read(new Uint8Array(e.target.result), { type: 'array' }).SheetNames[0]]);
+            let db = JSON.parse(localStorage.getItem('disasterFullDB')) || [];
+            raw.forEach(row => {
+                const keys = Object.keys(row);
+                db.push({
+                    cognome: (trovaCampo(row, keys, ['cognome', 'surname']) || "").toUpperCase(),
+                    nome: (trovaCampo(row, keys, ['nome', 'name']) || "").toUpperCase(),
+                    cf: (trovaCampo(row, keys, ['cf', 'fiscale']) || "").toUpperCase().replace(/\s/g, ''),
+                    tel: trovaCampo(row, keys, ['tel', 'cell']) || "+39 ",
+                    email: (trovaCampo(row, keys, ['email', 'mail']) || "").toLowerCase(),
+                    note: trovaCampo(row, keys, ['note', 'info']) || "Import AI",
+                    privacy: "Si", immagini: "Si", data_salv: new Date().toLocaleDateString()
+                });
+            });
+            localStorage.setItem('disasterFullDB', JSON.stringify(db));
+            aggiornaTabella();
+            alert("Excel elaborato!");
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    function trovaCampo(row, keys, sinonimi) {
+        const key = keys.find(k => sinonimi.some(s => k.toLowerCase().includes(s.toLowerCase())));
+        return key ? row[key] : "";
+    }
+
+    function cercaSocio() {
+        let input = document.getElementById('searchInput').value.toUpperCase();
+        let rows = document.querySelectorAll('#tabellaArchivio tbody tr');
+        rows.forEach(r => r.style.display = r.innerText.toUpperCase().includes(input) ? "" : "none");
+    }
+</script>
+</body>
+</html>
