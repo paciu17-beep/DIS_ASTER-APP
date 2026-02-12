@@ -3,19 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DIS-ASTER APS - Tesseramento Cloud</title>
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas<!DOCTYPE html>
-<html lang="it">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DIS-ASTER APS - Sistema Cloud Professionale</title>
+    <title>DIS-ASTER APS - Sistema Integrato</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, updateDoc, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyBlEDU-uS8tTMe1YCYDkHjJArHknIUn2HQ",
@@ -30,6 +25,10 @@
         const db = getFirestore(app);
         let databaseSoci = [];
 
+        // Formattazione Date
+        const formattaDataITA = (d) => d.split("-").reverse().join("/");
+
+        // INVIO MODULO AL CLOUD
         async function gestisciInvio(event) {
             event.preventDefault();
             const idEsistente = document.getElementById('socioId').value;
@@ -37,108 +36,146 @@
             btn.disabled = true;
 
             const datiSocio = {
-                nome: document.getElementById('nome').value,
-                cognome: document.getElementById('cognome').value,
-                cf: document.getElementById('cf').value.toUpperCase(),
+                cognome: document.getElementById('cognome').value.trim().toUpperCase(),
+                nome: document.getElementById('nome').value.trim().toUpperCase(),
+                cf: document.getElementById('cf').value.trim().toUpperCase(),
                 data_nascita: document.getElementById('data_nascita').value,
-                luogo_nascita: document.getElementById('luogo_nascita').value,
-                cittadinanza: "ITALIANO",
-                telefono: document.getElementById('telefono').value,
-                email: document.getElementById('email').value,
+                luogo_nascita: document.getElementById('luogo_nascita').value.toUpperCase(),
+                telefono: document.getElementById('telefono').value.trim(),
+                email: document.getElementById('email').value.trim().toLowerCase(),
+                consenso24: document.querySelector('input[name="consenso24"]:checked').value,
+                consenso25: document.querySelector('input[name="consenso25"]:checked').value,
+                autorizzazioneImmagine: document.querySelector('input[name="autorizzazioneImmagine"]:checked').value,
                 data_registrazione: idEsistente ? document.getElementById('dataReg').value : new Date().toLocaleDateString('it-IT')
             };
 
             try {
                 if (idEsistente) {
                     await updateDoc(doc(db, "soci", idEsistente), datiSocio);
-                    alert("✅ Dati aggiornati nel Cloud!");
+                    alert("✅ Dati aggiornati!");
                 } else {
                     await addDoc(collection(db, "soci"), datiSocio);
-                    alert("✅ Socio salvato con successo!");
+                    alert("✅ Socio salvato nel Cloud!");
                 }
                 resettaModulo();
                 switchTab('form');
-            } catch (e) { alert("❌ Errore di connessione."); }
+            } catch (e) { alert("❌ Errore Cloud."); }
             btn.disabled = false;
         }
 
-        async function caricaArchivio() {
-            const elenco = document.getElementById('listaSoci');
-            elenco.innerHTML = "Caricamento...";
-            try {
-                const q = query(collection(db, "soci"), orderBy("cognome", "asc"));
-                const querySnapshot = await getDocs(q);
-                databaseSoci = [];
-                querySnapshot.forEach(doc => databaseSoci.push({id: doc.id, ...doc.data()}));
-                mostraSoci(databaseSoci);
-            } catch (e) { elenco.innerHTML = "Errore."; }
-        }
-
-        function mostraSoci(array) {
-            const elenco = document.getElementById('listaSoci');
-            elenco.innerHTML = array.length === 0 ? "Nessun socio." : "";
-            array.forEach(s => {
-                const div = document.createElement('div');
-                div.className = "socio-card";
-                div.innerHTML = `
-                    <div class="socio-info"><strong>${s.cognome.toUpperCase()} ${s.nome}</strong><br><small>${s.cf}</small></div>
-                    <div class="socio-actions">
-                        <button class="btn-edit" onclick="preparaModifica('${s.id}')">Modifica</button>
-                        <button class="btn-pdf" onclick="generaPDF('${s.id}')">Scarica PDF</button>
-                    </div>
-                `;
-                elenco.appendChild(div);
-            });
-        }
-
+        // GENERAZIONE PDF UFFICIALE
         window.generaPDF = function(id) {
             const s = databaseSoci.find(x => x.id === id);
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
             
-            // Layout identico alla tua foto
-            doc.setFontSize(14);
-            doc.setFont("helvetica", "bold");
-            doc.text("DOMANDA DI TESSERAMENTO", 105, 20, { align: "center" });
-            doc.text("APS DIS_ASTER", 105, 28, { align: "center" });
-            
-            doc.setFontSize(10);
-            doc.setFont("helvetica", "normal");
-            let y = 45;
-            const campi = [
-                ["Nome:", s.nome], ["Cognome:", s.cognome], ["Codice Fiscale:", s.cf],
-                ["Data di nascita:", s.data_nascita], ["Luogo di nascita:", s.luogo_nascita],
-                ["Cittadinanza:", "ITALIANO"], ["Telefono:", s.telefono], ["Email:", s.email]
-            ];
-            campi.forEach(c => {
-                doc.setFont("helvetica", "bold"); doc.text(c[0], 20, y);
-                doc.setFont("helvetica", "normal"); doc.text(c[1], 55, y);
-                y += 7;
-            });
-
-            doc.setFont("helvetica", "bold"); doc.text("DICHIARAZIONE", 20, y + 5);
+            doc.setFillColor(0, 51, 102); doc.rect(0, 0, 210, 30, 'F');
+            doc.setTextColor(255, 255, 255); doc.setFontSize(16);
+            doc.text("DOMANDA DI TESSERAMENTO ACSI", 105, 15, { align: "center" });
             doc.setFontSize(8);
-            const dichiarazione = "aderisce ad ACSI - Associazione di Cultura, Sport e Tempo libero APS. Ente di promozione sportiva riconosciuto dal CONI e dal CIP, nonche' Rete Associativa di Terzo Settore in qualita' di tesserato per il tramite del sodalizio affiliato: DIS_ASTER. Codice Fiscale: 91045510191. A tal fine dichiara di conoscere e rispettare lo Statuto ACSI ed i regolamenti interni, aver preso visione dell'informativa privacy (Regolamento UE 2016/679 GDPR).";
-            const splitDic = doc.splitTextToSize(dichiarazione, 170);
-            doc.text(splitDic, 20, y + 12);
+            doc.text("DIS-ASTER APS | CF: 91046610191 | Via IV Novembre, Crema | disastercircolo@gmail.com", 105, 23, { align: "center" });
 
-            doc.text(`Data: ${s.data_registrazione}`, 20, y + 50);
-            doc.text("Firma del richiedente: ___________________________", 20, y + 60);
-            
-            doc.save(`Domanda_${s.cognome}.pdf`);
+            doc.setTextColor(0,0,0); doc.setFontSize(10); doc.setFont("helvetica", "bold");
+            doc.text("DATI TESSERATO", 20, 45);
+            doc.setFont("helvetica", "normal");
+            doc.text(`Socio: ${s.cognome} ${s.nome}`, 20, 52);
+            doc.text(`Codice Fiscale: ${s.cf}`, 20, 59);
+            doc.text(`Nato a: ${s.luogo_nascita} il ${formattaDataITA(s.data_nascita)}`, 20, 66);
+            doc.text(`Contatti: ${s.telefono} | ${s.email}`, 20, 73);
+
+            doc.setFontSize(7);
+            const dic = "DICHIARAZIONE ACSI: Aderisce ad ACSI APS. Dichiara di conoscere Statuto e polizze su www.acsi.it e informativa GDPR.";
+            doc.text(doc.splitTextToSize(dic, 170), 20, 85);
+            doc.text(`Consenso 2.4: ${s.consenso24} | Consenso 2.5: ${s.consenso25}`, 20, 100);
+            doc.text(`Uso Immagine: ${s.autorizzazioneImmagine}`, 20, 105);
+
+            doc.text(`Data: ${s.data_registrazione}`, 20, 140);
+            doc.text("Firma Socio: ________________________", 20, 155);
+            doc.save(`Modulo_${s.cognome}.pdf`);
         }
 
-        window.cercaSoci = function() {
-            const txt = document.getElementById('inputCerca').value.toLowerCase();
-            const filtered = databaseSoci.filter(s => s.nome.toLowerCase().includes(txt) || s.cognome.toLowerCase().includes(txt));
-            mostraSoci(filtered);
+        // EXCEL: ESPORTA
+        window.esportaExcel = function() {
+            const foglio = XLSX.utils.json_to_sheet(databaseSoci);
+            const libro = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(libro, foglio, "Soci");
+            XLSX.writeFile(libro, "Database_DISASTER.xlsx");
         }
 
-        window.preparaModifica = function(id) {
+        // EXCEL: IMPORTA INTELLIGENTE
+        window.importaExcel = function(event) {
+            const file = event.target.files[0];
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const lista = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                
+                if(confirm(`Trovati ${lista.length} soci. Caricarli nel Cloud?`)) {
+                    const batch = writeBatch(db);
+                    lista.forEach(item => {
+                        const nuovoSocio = {
+                            cognome: (item.cognome || item.Cognome || "").toUpperCase(),
+                            nome: (item.nome || item.Nome || "").toUpperCase(),
+                            cf: (item.cf || item.CF || item['Codice Fiscale'] || "").toUpperCase(),
+                            data_nascita: item.data_nascita || item['Data di nascita'] || "",
+                            luogo_nascita: (item.luogo_nascita || item.Luogo || "").toUpperCase(),
+                            telefono: item.telefono || item.Cellulare || "+39",
+                            email: (item.email || item.Email || "").toLowerCase(),
+                            consenso24: "Presto il consenso",
+                            consenso25: "Presto il consenso",
+                            autorizzazioneImmagine: "Autorizzo",
+                            data_registrazione: new Date().toLocaleDateString('it-IT')
+                        };
+                        const ref = doc(collection(db, "soci"));
+                        batch.set(ref, nuovoSocio);
+                    });
+                    await batch.commit();
+                    alert("Importazione completata!");
+                    caricaArchivio();
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // GESTIONE ARCHIVIO
+        window.cancellaSocio = async (id) => { if(confirm("Eliminare?")) { await deleteDoc(doc(db,"soci",id)); caricaArchivio(); }};
+        
+        window.caricaArchivio = async () => {
+            const q = query(collection(db, "soci"), orderBy("cognome", "asc"));
+            const snap = await getDocs(q);
+            databaseSoci = [];
+            snap.forEach(d => databaseSoci.push({id: d.id, ...d.data()}));
+            render(databaseSoci);
+        };
+
+        function render(arr) {
+            const div = document.getElementById('listaSoci');
+            div.innerHTML = "";
+            arr.forEach(s => {
+                const item = document.createElement('div');
+                item.className = "socio-card";
+                item.innerHTML = `
+                    <div><strong>${s.cognome} ${s.nome}</strong></div>
+                    <div class="socio-actions">
+                        <button class="btn-pdf" onclick="generaPDF('${s.id}')">PDF</button>
+                        <button class="btn-edit" onclick="preparaModifica('${s.id}')">Mod</button>
+                        <button class="btn-del" onclick="cancellaSocio('${s.id}')">X</button>
+                    </div>`;
+                div.appendChild(item);
+            });
+        }
+
+        window.cercaSoci = () => {
+            const t = document.getElementById('inputCerca').value.toLowerCase();
+            render(databaseSoci.filter(s => s.cognome.toLowerCase().includes(t)));
+        }
+
+        window.preparaModifica = (id) => {
             const s = databaseSoci.find(x => x.id === id);
             document.getElementById('socioId').value = s.id;
-            document.getElementById('nome').value = s.nome;
             document.getElementById('cognome').value = s.cognome;
+            document.getElementById('nome').value = s.nome;
             document.getElementById('cf').value = s.cf;
             document.getElementById('data_nascita').value = s.data_nascita;
             document.getElementById('luogo_nascita').value = s.luogo_nascita;
@@ -148,59 +185,85 @@
         }
 
         window.gestisciInvio = gestisciInvio;
-        window.caricaArchivio = caricaArchivio;
-        window.resettaModulo = () => document.getElementById('formSocio').reset();
+        window.resettaModulo = () => { document.getElementById('formSocio').reset(); document.getElementById('telefono').value = "+39 "; };
     </script>
 
     <style>
-        :root { --blue: #003366; --bg: #f0f2f5; }
-        body { font-family: sans-serif; background: var(--bg); margin: 0; padding: 10px; }
-        .app-container { max-width: 550px; margin: auto; background: white; border-radius: 15px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-        .header { background: var(--blue); color: white; padding: 20px; text-align: center; }
+        :root { --blue: #003366; --gold: #ffc107; --red: #d9534f; --green: #28a745; }
+        body { font-family: sans-serif; background: #f4f7f9; margin: 0; padding: 10px; }
+        .app-container { max-width: 600px; margin: auto; background: white; border-radius: 15px; box-shadow: 0 5px 20px rgba(0,0,0,0.1); overflow: hidden; }
+        .header { background: var(--blue); color: white; padding: 15px; text-align: center; }
         .nav { display: flex; background: #eee; }
         .nav button { flex: 1; padding: 15px; border: none; cursor: pointer; font-weight: bold; }
-        .nav button.active { background: white; color: var(--blue); border-top: 3px solid var(--blue); }
+        .nav button.active { background: white; color: var(--blue); border-top: 4px solid var(--blue); }
         .pane { padding: 20px; display: none; }
         .pane.active { display: block; }
-        input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; }
-        .main-btn { width: 100%; padding: 15px; background: var(--blue); color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 16px; }
-        .socio-card { border-bottom: 1px solid #eee; padding: 15px; display: flex; justify-content: space-between; align-items: center; }
-        .btn-pdf { background: #28a745; color: white; border: none; padding: 8px; border-radius: 5px; cursor: pointer; margin-left: 5px; }
-        .btn-edit { background: #ffc107; border: none; padding: 8px; border-radius: 5px; cursor: pointer; }
+        input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
+        .upper { text-transform: uppercase; }
+        .lower { text-transform: lowercase; }
+        .legal { font-size: 11px; background: #f9f9f9; padding: 10px; border-radius: 5px; margin: 10px 0; border-left: 3px solid var(--blue); }
+        .radio-box { font-size: 13px; margin: 10px 0; padding: 10px; border: 1px solid #eee; border-radius: 8px; }
+        .main-btn { width: 100%; padding: 16px; background: var(--blue); color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .excel-tools { display: flex; gap: 10px; margin-bottom: 20px; }
+        .btn-ex { flex: 1; padding: 10px; font-size: 12px; border-radius: 5px; border: 1px solid #ccc; cursor: pointer; }
+        .socio-card { padding: 15px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+        .socio-actions { display: flex; gap: 5px; }
+        .socio-actions button { border: none; padding: 8px; border-radius: 5px; cursor: pointer; color: white; }
+        .btn-pdf { background: var(--green); }
+        .btn-edit { background: var(--gold); color: black !important; }
+        .btn-del { background: var(--red); }
     </style>
 </head>
 <body>
 
 <div class="app-container">
-    <div class="header"><h1>DIS-ASTER APS</h1></div>
+    <div class="header"><h3>DIS-ASTER APS</h3></div>
     <div class="nav">
-        <button id="btnForm" class="active" onclick="switchTab('form')">NUOVO SOCIO</button>
-        <button id="btnArchivio" onclick="switchTab('archivio')">ARCHIVIO CLOUD</button>
+        <button id="btnForm" class="active" onclick="switchTab('form')">MODULO</button>
+        <button id="btnArchivio" onclick="switchTab('archivio')">ARCHIVIO</button>
     </div>
 
     <div id="paneForm" class="pane active">
         <form id="formSocio" onsubmit="gestisciInvio(event)">
             <input type="hidden" id="socioId"><input type="hidden" id="dataReg">
-            <input type="text" id="nome" placeholder="Nome" required>
-            <input type="text" id="cognome" placeholder="Cognome" required>
-            <input type="text" id="cf" placeholder="Codice Fiscale" required>
+            <input type="text" id="cognome" class="upper" placeholder="COGNOME *" required>
+            <input type="text" id="nome" class="upper" placeholder="NOME *" required>
+            <input type="text" id="cf" class="upper" placeholder="CODICE FISCALE *" required maxlength="16">
             <input type="date" id="data_nascita" required>
-            <input type="text" id="luogo_nascita" placeholder="Luogo di Nascita" required>
-            <input type="tel" id="telefono" placeholder="Telefono" required>
-            <input type="email" id="email" placeholder="Email" required>
-            <button type="submit" class="main-btn">Invia Domanda di Iscrizione</button>
+            <input type="text" id="luogo_nascita" class="upper" placeholder="LUOGO DI NASCITA *" required>
+            <input type="tel" id="telefono" value="+39 " required>
+            <input type="email" id="email" class="lower" placeholder="email@esempio.it">
+
+            <div class="legal"><strong>Dichiarazione ACSI:</strong> Aderisce ad ACSI APS via DISASTRO (CF: 91046610191). Conosce Statuto e Privacy.</div>
+            
+            <div class="radio-box">
+                Punto 2.4: <input type="radio" name="consenso24" value="Presto il consenso" required> SI <input type="radio" name="consenso24" value="Non presto"> NO
+            </div>
+            <div class="radio-box">
+                Punto 2.5: <input type="radio" name="consenso25" value="Presto il consenso" required> SI <input type="radio" name="consenso25" value="Non presto"> NO
+            </div>
+            <div class="radio-box">
+                Immagine: <input type="radio" name="autorizzazioneImmagine" value="Autorizzo" required> SI <input type="radio" name="autorizzazioneImmagine" value="Non autorizzo"> NO
+            </div>
+            <div class="radio-box"><input type="checkbox" required> Accetto Statuto e Privacy *</div>
+
+            <button type="submit" class="main-btn">Salva Socio nel Cloud</button>
         </form>
     </div>
 
     <div id="paneArchivio" class="pane">
-        <input type="text" id="inputCerca" placeholder="🔍 Cerca per cognome..." onkeyup="cercaSoci()">
+        <div class="excel-tools">
+            <button class="btn-ex" onclick="esportaExcel()">📥 Esporta Excel</button>
+            <button class="btn-ex" onclick="document.getElementById('fileExcel').click()">📤 Importa Excel</button>
+            <input type="file" id="fileExcel" hidden accept=".xlsx, .xls" onchange="importaExcel(event)">
+        </div>
+        <input type="text" id="inputCerca" placeholder="🔍 Cerca cognome..." onkeyup="cercaSoci()">
         <div id="listaSoci"></div>
     </div>
 </div>
 
 <script>
     function switchTab(t) {
-        if(t === 'archivio' && prompt("Password:") !== "qwerty") return;
         document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
         document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
         document.getElementById('pane' + t.charAt(0).toUpperCase() + t.slice(1)).classList.add('active');
