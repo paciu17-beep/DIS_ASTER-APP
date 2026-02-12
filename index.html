@@ -5,10 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DIS-ASTER APS - Tesseramento Cloud</title>
     <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DIS-ASTER APS - Sistema Cloud Professionale</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, collection, addDoc, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-        // Tua configurazione Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyBlEDU-uS8tTMe1YCYDkHjJArHknIUn2HQ",
             authDomain: "disaster-cloud.firebaseapp.com",
@@ -18,116 +26,186 @@
             appId: "1:822184145467:web:9dfa664d4a3cde74b1e21e"
         };
 
-        // Inizializza Firebase
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
+        let databaseSoci = [];
 
-        // Funzione per salvare sul CLOUD
-        async function salvaSocio(event) {
+        async function gestisciInvio(event) {
             event.preventDefault();
+            const idEsistente = document.getElementById('socioId').value;
             const btn = event.target.querySelector('button');
             btn.disabled = true;
-            btn.innerText = "Salvataggio in corso...";
 
-            const socio = {
+            const datiSocio = {
                 nome: document.getElementById('nome').value,
                 cognome: document.getElementById('cognome').value,
                 cf: document.getElementById('cf').value.toUpperCase(),
+                data_nascita: document.getElementById('data_nascita').value,
+                luogo_nascita: document.getElementById('luogo_nascita').value,
+                cittadinanza: "ITALIANO",
                 telefono: document.getElementById('telefono').value,
-                data: new Date().toLocaleString('it-IT')
+                email: document.getElementById('email').value,
+                data_registrazione: idEsistente ? document.getElementById('dataReg').value : new Date().toLocaleDateString('it-IT')
             };
 
             try {
-                await addDoc(collection(db, "soci"), socio);
-                alert("Socio salvato nel Cloud con successo!");
-                document.getElementById('formSocio').reset();
-            } catch (e) {
-                console.error("Errore: ", e);
-                alert("Errore nel salvataggio Cloud. Riprova.");
-            } finally {
-                btn.disabled = false;
-                btn.innerText = "Salva Socio";
-            }
+                if (idEsistente) {
+                    await updateDoc(doc(db, "soci", idEsistente), datiSocio);
+                    alert("✅ Dati aggiornati nel Cloud!");
+                } else {
+                    await addDoc(collection(db, "soci"), datiSocio);
+                    alert("✅ Socio salvato con successo!");
+                }
+                resettaModulo();
+                switchTab('form');
+            } catch (e) { alert("❌ Errore di connessione."); }
+            btn.disabled = false;
         }
 
-        // Funzione per caricare i dati dal CLOUD nell'archivio
         async function caricaArchivio() {
-            const lista = document.getElementById('listaSociCloud');
-            lista.innerHTML = "Caricamento dati dal cloud...";
-            
+            const elenco = document.getElementById('listaSoci');
+            elenco.innerHTML = "Caricamento...";
             try {
-                const q = query(collection(db, "soci"), orderBy("data", "desc"));
+                const q = query(collection(db, "soci"), orderBy("cognome", "asc"));
                 const querySnapshot = await getDocs(q);
-                lista.innerHTML = "";
-                
-                querySnapshot.forEach((doc) => {
-                    const s = doc.data();
-                    const div = document.createElement('div');
-                    div.className = "socio-item";
-                    div.innerHTML = `<strong>${s.cognome} ${s.nome}</strong><br>CF: ${s.cf} | Tel: ${s.telefono}<br><small>${s.data}</small>`;
-                    lista.appendChild(div);
-                });
-            } catch (e) {
-                lista.innerHTML = "Errore nel caricamento.";
-            }
+                databaseSoci = [];
+                querySnapshot.forEach(doc => databaseSoci.push({id: doc.id, ...doc.data()}));
+                mostraSoci(databaseSoci);
+            } catch (e) { elenco.innerHTML = "Errore."; }
         }
 
-        window.salvaSocio = salvaSocio;
+        function mostraSoci(array) {
+            const elenco = document.getElementById('listaSoci');
+            elenco.innerHTML = array.length === 0 ? "Nessun socio." : "";
+            array.forEach(s => {
+                const div = document.createElement('div');
+                div.className = "socio-card";
+                div.innerHTML = `
+                    <div class="socio-info"><strong>${s.cognome.toUpperCase()} ${s.nome}</strong><br><small>${s.cf}</small></div>
+                    <div class="socio-actions">
+                        <button class="btn-edit" onclick="preparaModifica('${s.id}')">Modifica</button>
+                        <button class="btn-pdf" onclick="generaPDF('${s.id}')">Scarica PDF</button>
+                    </div>
+                `;
+                elenco.appendChild(div);
+            });
+        }
+
+        window.generaPDF = function(id) {
+            const s = databaseSoci.find(x => x.id === id);
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            
+            // Layout identico alla tua foto
+            doc.setFontSize(14);
+            doc.setFont("helvetica", "bold");
+            doc.text("DOMANDA DI TESSERAMENTO", 105, 20, { align: "center" });
+            doc.text("APS DIS_ASTER", 105, 28, { align: "center" });
+            
+            doc.setFontSize(10);
+            doc.setFont("helvetica", "normal");
+            let y = 45;
+            const campi = [
+                ["Nome:", s.nome], ["Cognome:", s.cognome], ["Codice Fiscale:", s.cf],
+                ["Data di nascita:", s.data_nascita], ["Luogo di nascita:", s.luogo_nascita],
+                ["Cittadinanza:", "ITALIANO"], ["Telefono:", s.telefono], ["Email:", s.email]
+            ];
+            campi.forEach(c => {
+                doc.setFont("helvetica", "bold"); doc.text(c[0], 20, y);
+                doc.setFont("helvetica", "normal"); doc.text(c[1], 55, y);
+                y += 7;
+            });
+
+            doc.setFont("helvetica", "bold"); doc.text("DICHIARAZIONE", 20, y + 5);
+            doc.setFontSize(8);
+            const dichiarazione = "aderisce ad ACSI - Associazione di Cultura, Sport e Tempo libero APS. Ente di promozione sportiva riconosciuto dal CONI e dal CIP, nonche' Rete Associativa di Terzo Settore in qualita' di tesserato per il tramite del sodalizio affiliato: DIS_ASTER. Codice Fiscale: 91045510191. A tal fine dichiara di conoscere e rispettare lo Statuto ACSI ed i regolamenti interni, aver preso visione dell'informativa privacy (Regolamento UE 2016/679 GDPR).";
+            const splitDic = doc.splitTextToSize(dichiarazione, 170);
+            doc.text(splitDic, 20, y + 12);
+
+            doc.text(`Data: ${s.data_registrazione}`, 20, y + 50);
+            doc.text("Firma del richiedente: ___________________________", 20, y + 60);
+            
+            doc.save(`Domanda_${s.cognome}.pdf`);
+        }
+
+        window.cercaSoci = function() {
+            const txt = document.getElementById('inputCerca').value.toLowerCase();
+            const filtered = databaseSoci.filter(s => s.nome.toLowerCase().includes(txt) || s.cognome.toLowerCase().includes(txt));
+            mostraSoci(filtered);
+        }
+
+        window.preparaModifica = function(id) {
+            const s = databaseSoci.find(x => x.id === id);
+            document.getElementById('socioId').value = s.id;
+            document.getElementById('nome').value = s.nome;
+            document.getElementById('cognome').value = s.cognome;
+            document.getElementById('cf').value = s.cf;
+            document.getElementById('data_nascita').value = s.data_nascita;
+            document.getElementById('luogo_nascita').value = s.luogo_nascita;
+            document.getElementById('telefono').value = s.telefono;
+            document.getElementById('email').value = s.email;
+            switchTab('form');
+        }
+
+        window.gestisciInvio = gestisciInvio;
         window.caricaArchivio = caricaArchivio;
+        window.resettaModulo = () => document.getElementById('formSocio').reset();
     </script>
 
     <style>
-        body { font-family: sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
-        .container { max-width: 500px; margin: auto; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        h2 { color: #1a73e8; text-align: center; }
-        input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
-        button { width: 100%; padding: 15px; background: #1a73e8; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
-        .tabs { display: flex; margin-bottom: 20px; }
-        .tab { flex: 1; text-align: center; padding: 10px; cursor: pointer; border-bottom: 2px solid transparent; }
-        .tab.active { border-bottom: 2px solid #1a73e8; color: #1a73e8; font-weight: bold; }
-        #archivioSection { display: none; }
-        .socio-item { padding: 10px; border-bottom: 1px solid #eee; }
+        :root { --blue: #003366; --bg: #f0f2f5; }
+        body { font-family: sans-serif; background: var(--bg); margin: 0; padding: 10px; }
+        .app-container { max-width: 550px; margin: auto; background: white; border-radius: 15px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .header { background: var(--blue); color: white; padding: 20px; text-align: center; }
+        .nav { display: flex; background: #eee; }
+        .nav button { flex: 1; padding: 15px; border: none; cursor: pointer; font-weight: bold; }
+        .nav button.active { background: white; color: var(--blue); border-top: 3px solid var(--blue); }
+        .pane { padding: 20px; display: none; }
+        .pane.active { display: block; }
+        input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; }
+        .main-btn { width: 100%; padding: 15px; background: var(--blue); color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 16px; }
+        .socio-card { border-bottom: 1px solid #eee; padding: 15px; display: flex; justify-content: space-between; align-items: center; }
+        .btn-pdf { background: #28a745; color: white; border: none; padding: 8px; border-radius: 5px; cursor: pointer; margin-left: 5px; }
+        .btn-edit { background: #ffc107; border: none; padding: 8px; border-radius: 5px; cursor: pointer; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h2>DIS-ASTER APS</h2>
-    
-    <div class="tabs">
-        <div class="tab active" id="tabForm" onclick="switchTab('form')">Nuovo Socio</div>
-        <div class="tab" id="tabArchivio" onclick="switchTab('archivio')">Archivio Cloud</div>
+<div class="app-container">
+    <div class="header"><h1>DIS-ASTER APS</h1></div>
+    <div class="nav">
+        <button id="btnForm" class="active" onclick="switchTab('form')">NUOVO SOCIO</button>
+        <button id="btnArchivio" onclick="switchTab('archivio')">ARCHIVIO CLOUD</button>
     </div>
 
-    <div id="formSection">
-        <form id="formSocio" onsubmit="salvaSocio(event)">
+    <div id="paneForm" class="pane active">
+        <form id="formSocio" onsubmit="gestisciInvio(event)">
+            <input type="hidden" id="socioId"><input type="hidden" id="dataReg">
             <input type="text" id="nome" placeholder="Nome" required>
             <input type="text" id="cognome" placeholder="Cognome" required>
             <input type="text" id="cf" placeholder="Codice Fiscale" required>
+            <input type="date" id="data_nascita" required>
+            <input type="text" id="luogo_nascita" placeholder="Luogo di Nascita" required>
             <input type="tel" id="telefono" placeholder="Telefono" required>
-            <button type="submit">Salva Socio</button>
+            <input type="email" id="email" placeholder="Email" required>
+            <button type="submit" class="main-btn">Invia Domanda di Iscrizione</button>
         </form>
     </div>
 
-    <div id="archivioSection">
-        <div id="listaSociCloud"></div>
+    <div id="paneArchivio" class="pane">
+        <input type="text" id="inputCerca" placeholder="🔍 Cerca per cognome..." onkeyup="cercaSoci()">
+        <div id="listaSoci"></div>
     </div>
 </div>
 
 <script>
-    function switchTab(type) {
-        if(type === 'form') {
-            document.getElementById('formSection').style.display = 'block';
-            document.getElementById('archivioSection').style.display = 'none';
-            document.getElementById('tabForm').classList.add('active');
-            document.getElementById('tabArchivio').classList.remove('active');
-        } else {
-            document.getElementById('formSection').style.display = 'none';
-            document.getElementById('archivioSection').style.display = 'block';
-            document.getElementById('tabForm').classList.remove('active');
-            document.getElementById('tabArchivio').classList.add('active');
-            caricaArchivio();
-        }
+    function switchTab(t) {
+        if(t === 'archivio' && prompt("Password:") !== "qwerty") return;
+        document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+        document.getElementById('pane' + t.charAt(0).toUpperCase() + t.slice(1)).classList.add('active');
+        document.getElementById('btn' + t.charAt(0).toUpperCase() + t.slice(1)).classList.add('active');
+        if(t === 'archivio') caricaArchivio();
     }
 </script>
 
